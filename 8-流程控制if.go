@@ -26,7 +26,24 @@ func printPriceWithWeather(weather string) {
 	}
 }
 
-func main8() {
+func IF2() {
+	a := 10
+	if a > 10 {
+		fmt.Println("a>10")
+	} else {
+		fmt.Println("a<=10")
+	}
+
+	if a := 10; a < 10 {
+		fmt.Println("a<10")
+	} else {
+		fmt.Println("a>=10")
+	}
+	// 注意，上边虽然两个例子里边都使用了变量a，但是并不会报冲突。
+	// 因为上边是两个独立的a，而这里是一个a，只不过是if语句里边又重新声明了一个a
+}
+
+func main2a() {
 	weather := "sunny"
 	printPrice(weather)
 
@@ -35,4 +52,6 @@ func main8() {
 	fmt.Println("--------------------------------------")
 	weather = "lightRain"
 	printPriceWithWeather(weather)
+	fmt.Println("--------------------------------------")
+	IF2()
 }

@@ -2,7 +2,7 @@ package main
 
 import "fmt"
 
-func gomain12() {
+func main12qw() {
 	// break continues
 	// break 终止本次循环
 	// continues 终止本次循环,继续下一次循环

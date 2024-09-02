@@ -34,4 +34,11 @@ func main3() {
 	// 常量 , 常量的值不能被修改,const关键字声明
 	const a = 1
 	fmt.Printf("a: %d\n", a)
+	// 常量多重赋值
+	const (
+		a1 = 10
+		b1 = 20
+		c1 = 30
+	)
+	fmt.Println(a1, b1, c1)
 }
