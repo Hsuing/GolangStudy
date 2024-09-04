@@ -28,7 +28,7 @@ func sum(args ...string) string {
 	return msg
 }
 
-func main() {
+func main112() {
 	fmt.Println("具有函数名字")
 	res := qiuhe(10, 20)
 	fmt.Println("res:", res)
