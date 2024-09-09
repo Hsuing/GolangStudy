@@ -1,0 +1,147 @@
+pipeline {
+  agent any
+  environment {
+	SOURCE_DIR_taskWeb = "$WORKSPACE"
+    TARGET_DIR_taskWeb = "/data/ufun/riskpayment/"
+    PID_TARGET = "ReplacePayment.dll"
+  }
+   options{
+        timestamps()
+        disableConcurrentBuilds()
+        buildDiscarder(
+            logRotator(
+                numToKeepStr: '5',
+                daysToKeepStr: '5',
+            )
+        )
+  }
+  parameters {
+    choice(
+      description: '你需要选择哪个环境进行部署 ?',
+      name: 'env',
+      choices: ['bcw环境']
+    )
+    choice(
+      description: '你需要选择哪个ip进行部署 ?45-dbay',
+      name: 'HOST_TEST',
+      choices: ['172.31.36.102','47.254.254.45']
+    )
+
+  }
+  stages {
+    stage('获取仓库代码') {
+     steps {
+       script {
+          deleteDir()
+          checkout([$class: 'GitSCM', branches: [[name: "*/master"]], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'CleanBeforeCheckout']], submoduleCfg: [], userRemoteConfigs: [[url: 'git@code.qechacha.com:biying/fengkong_line.git']]])
+          //env.GIT_COMMIT_MSG = sh (script: 'git log -1 --pretty=%B ${GIT_COMMIT}', returnStdout: true).trim()
+           wrap([$class: 'BuildUser']) {
+                    // some block
+                    //def user = env.BUILD_USER
+                    //manager.addShortText("启动人：${manager.envVars['BUILD_USER']}")
+                    //manager.addShortText("启动人：${user}")
+
+                    //buildName "#${BUILD_NUMBER}-^${BRANCH}^-${BUILD_USER}"
+                    buildName "#${BUILD_NUMBER}-^${env.GIT_COMMIT_MSG}"
+                    //输出最新一次提交信息
+                    //HTTPD_LOCATION= sh(  returnStdout: true, script: 'git show -s  |grep -vE "commit|Date" |grep -v "^$"')
+                    //修改Description"
+                    //buildDescription "${HTTPD_LOCATION}"
+           }
+       }
+     }
+  }
+    stage('backup service') {
+      steps {
+        sshagent(credentials: ['fengkong-52']) {
+          sh '''
+            ssh -o StrictHostKeyChecking=no ${HOST_TEST} "rsync  -azP   --exclude='Log*' /data/ufun/riskpayment/* /data/rollback/riskpayment_$(date +%F_%H_%M)"
+          '''
+        }
+      }
+    }
+    stage('deploy bcw service') {
+      when {
+        expression {
+          params.env == 'bcw环境'
+        }
+      }
+      steps {
+        sshagent(credentials: ['fengkong-52']) {
+          //sh "ssh -o StrictHostKeyChecking=no ${HOST_TEST} uname -a"
+          //--exclude=appsettings.json
+          sh "rsync -avzP --exclude=appsettings.json ${SOURCE_DIR_taskWeb}/* ${HOST_TEST}:${TARGET_DIR_taskWeb}"
+          sh 'echo "部署成功"'
+        }
+      }
+    }
+
+     stage('start service') {
+      steps {
+                withEnv(['JENKINS_NODE_COOKIE=dontKillMe']) {
+                    sh '''
+                        export BUILD_ID=dontKillMe
+                        echo "开始调用远程对${PID_TARGET}进行重启"
+                        ssh -o StrictHostKeyChecking=no ${HOST_TEST} "supervisorctl stop riskpaymentFK"
+                        ssh -o StrictHostKeyChecking=no ${HOST_TEST} "supervisorctl start riskpaymentFK"
+                    '''
+                }
+            }
+      }
+
+      stage('check health') {
+			steps {
+			script{
+			//
+				script {
+                    //def healthUrl = null
+                    healthUrl = "ssh ${HOST_TEST} 'ps -ef|grep ${PID_TARGET}|grep -v grep'"
+                    echo "睡眠两分钟，待应用完全准备好"
+                    Thread.sleep((long) 1000 * 60 * 1)//睡眠1分钟
+                    String shellStr = sh(script: "${healthUrl}", returnStdout: true)
+                    echo "应用健康检查结果:${shellStr}"
+                    if (shellStr.indexOf("${PID_TARGET}") > 0) {
+                        echo "应用健康运行"
+                    } else {
+                        Thread.sleep((long) 1000 * 60 * 1)//睡眠0.5分钟
+                        shellStr = sh(script: "${healthUrl}", returnStdout: true)
+                        if (shellStr.indexOf("${PID_TARGET}") > 0) {
+                            echo "应用健康运行"
+                        } else {
+                            throw new RuntimeException("应用不稳定，请检查服务是否正常")
+                        }
+                    }
+            }
+		 //
+          }
+      }
+   }
+
+
+  }
+
+  post {
+    success {
+      dingtalk (
+        robot: 'han',
+        type: 'ACTION_CARD',
+        atAll: true,
+        title: '你有新的消息，请注意查收',
+        hideAvatar: false,
+        text:[
+          "### [${env.JOB_NAME}](${env.JOB_URL}) ",
+          '---',
+          '- 所属：后端服务',
+          "- 构建任务：${env.BUILD_DISPLAY_NAME}",
+          "- Git commit：${env.GIT_COMMIT_MSG}",
+          "- 本次更新内容：${params.update}",
+          "- 部署环境：${params.env}",
+          "- 持续时间：${currentBuild.durationString}".split("and counting")[0],
+          "- 构建人: <font color=#EE0000 >${currentBuild.buildCauses.shortDescription}</font>",
+          '- 构建结果：成功'
+        ]
+      )
+
+    }
+  }
+}
