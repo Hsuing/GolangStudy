@@ -12,7 +12,7 @@ type Person struct {
 	Addr string
 }
 
-func main() {
+func mainzxd() {
 	var p Person
 	// 进行赋值
 	p.Name = "han"
