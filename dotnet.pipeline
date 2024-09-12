@@ -1,0 +1,148 @@
+pipeline {
+  agent any
+  environment {
+
+    SOURCE_DIR_taskWeb = "$WORKSPACE/*"
+    //
+    TARGET_DIR_taskWeb = "/data/ufun/TradeSystem.Community/"
+
+    PID_TARGET = "/data/ufun/TradeSystem.Community/TradeSystem.Community"
+
+
+    BUILD_DIR_HOSTWEB = "$WORKSPACE/TradeSystem.Community"
+
+  }
+   options{
+        timestamps()
+        disableConcurrentBuilds()
+        buildDiscarder(
+            logRotator(
+                numToKeepStr: '5',
+                daysToKeepStr: '5',
+            )
+        )
+  }
+  parameters {
+    choice(
+      description: '你需要选择哪个环境进行部署 ?',
+      name: 'env',
+      choices: ['bw环境']
+    )
+    choice(
+      description: '你需要选择哪个分支进行部署 ?',
+      name: 'branchs',
+      choices: ['master']
+    )
+     choice(
+      description: '你需要选择哪个ip进行部署 ?，32-dbay,90-rouge',
+      name: 'HOST_TEST',
+      choices: ['172.31.40.122','54.249.51.90']
+    )
+
+    string(name: 'update', defaultValue: '', description: '本次更新内容?')
+  }
+  stages {
+    stage('获取仓库代码') {
+     steps {
+       script {
+          deleteDir()
+          checkout([$class: 'GitSCM', branches: [[name: "*/$branchs"]], doGenerateSubmoduleConfigurations: false, extensions: [[$class: 'CleanBeforeCheckout']], submoduleCfg: [], userRemoteConfigs: [[url: 'git@code.qechacha.com:root/jenkins_community.git']]])
+          //env.GIT_COMMIT_MSG = sh (script: 'git log -1 --pretty=%B ${GIT_COMMIT}', returnStdout: true).trim()
+           wrap([$class: 'BuildUser']) {
+                    // some block
+                    //def user = env.BUILD_USER
+                    //manager.addShortText("启动人：${manager.envVars['BUILD_USER']}")
+                    //manager.addShortText("启动人：${user}")
+
+                    //buildName "#${BUILD_NUMBER}-^${BRANCH}^-${BUILD_USER}"
+                    buildName "#${BUILD_NUMBER}-^${env.GIT_COMMIT_MSG}"
+                    //输出最新一次提交信息
+                    //HTTPD_LOCATION= sh(  returnStdout: true, script: 'git show -s  |grep -vE "commit|Date" |grep -v "^$"')
+                    //修改Description"
+                    //buildDescription "${HTTPD_LOCATION}"
+           }
+       }
+     }
+  }
+	stage('backup service') {
+		steps {
+			sshagent(credentials: ['jlpaappman']) {
+				sh '''
+				ssh -o StrictHostKeyChecking=no ${HOST_TEST} "rsync  -azP   --exclude='Log*' /data/ufun/TradeSystem.Community/* /data/rollback/TradeSystem.Community_$(date +%F_%H_%M)"
+				'''
+			}
+		}
+     }
+     stage('stop service') {
+      steps {
+                withEnv(['JENKINS_NODE_COOKIE=dontKillMe']) {
+                    sh '''
+                        export BUILD_ID=dontKillMe
+                        echo "开始调用远程对${PID_TARGET}进行重启"
+                        ssh -o StrictHostKeyChecking=no ${HOST_TEST} "supervisorctl stop Community"
+                    '''
+                }
+            }
+      }
+    stage('deploy service') {
+      when {
+        expression {
+          params.env == 'bw环境'
+        }
+      }
+      steps {
+        sshagent(credentials: ['redis']) {
+          //sh "ssh -o StrictHostKeyChecking=no ${HOST_TEST} uname -a --exclude=appsettings.json"
+          sh "rsync -avzP --exclude=appsettings.json ${SOURCE_DIR_taskWeb} ${HOST_TEST}:${TARGET_DIR_taskWeb}"
+          sh 'echo "部署成功"'
+        }
+      }
+    }
+
+     stage('start service') {
+      steps {
+                withEnv(['JENKINS_NODE_COOKIE=dontKillMe']) {
+                    sh '''
+                        export BUILD_ID=dontKillMe
+                        echo "开始调用远程对${PID_TARGET}进行重启"
+                        ssh -o StrictHostKeyChecking=no ${HOST_TEST} "chmod 750 /data/ufun/TradeSystem.Community/TradeSystem.Community"
+                        ssh -o StrictHostKeyChecking=no ${HOST_TEST} "supervisorctl start Community"
+
+                    '''
+                }
+            }
+      }
+
+      stage('check health') {
+			steps {
+			script{
+			//
+				script {
+                    //def healthUrl = null
+                    healthUrl = "ssh ${HOST_TEST} 'ps -ef|grep ${PID_TARGET}|grep -v grep'"
+                    echo "睡眠两分钟，待应用完全准备好"
+                    Thread.sleep((long) 1000 * 60 * 1)//睡眠1分钟
+                    String shellStr = sh(script: "${healthUrl}", returnStdout: true)
+                    echo "应用健康检查结果:${shellStr}"
+                    if (shellStr.indexOf("${PID_TARGET}") > 0) {
+                        echo "应用健康运行"
+                    } else {
+                        Thread.sleep((long) 1000 * 60 * 1)//睡眠0.5分钟
+                        shellStr = sh(script: "${healthUrl}", returnStdout: true)
+                        if (shellStr.indexOf("${PID_TARGET}") > 0) {
+                            echo "应用健康运行"
+                        } else {
+                            throw new RuntimeException("应用不稳定，请检查服务是否正常")
+                        }
+                    }
+            }
+		 //
+          }
+      }
+   }
+
+
+  }
+
+
+}

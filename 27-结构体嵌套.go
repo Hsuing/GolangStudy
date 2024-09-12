@@ -21,7 +21,7 @@ type GetInfos struct {
 	Phone
 }
 
-func main() {
+func mainaqwsx() {
 	var p Person1
 	p.Name = "han"
 	p.Age = 20

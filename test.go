@@ -13,7 +13,7 @@ func (s *Song) Eat(food string) {
 	fmt.Printf("%s在吃%s", s.Name, food)
 }
 
-func main() {
+func mainop() {
 	s := Song{
 		Name: "han",
 		Sex:  "男",
