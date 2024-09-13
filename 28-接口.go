@@ -1,6 +1,8 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+)
 
 type DBconfig struct {
 	User     string
@@ -49,11 +51,11 @@ func (m Mysql) Query(sql string) error {
 
 // 定义更新方法
 func (m Mysql) Update(sql string) error {
-	fmt.Println("更新数据到Mysql,update sql:", sql)
+	fmt.Println("update:", sql)
 	return nil
 }
 
-func main() {
+func mainju() {
 	db := DBconfig{
 		User:     "root",
 		Pass:     "123456",
@@ -74,5 +76,8 @@ func main() {
 	m.config = db
 	// 接口赋值
 	dbInterface = m
+
 	dbInterface.Insert("insert")
+
+	// 输入九九乘法口诀
 }
