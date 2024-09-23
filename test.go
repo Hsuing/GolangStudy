@@ -1,5 +1,5 @@
 package main
 
-func main() {
+func mainko() {
 	// 乘法口诀
 }
