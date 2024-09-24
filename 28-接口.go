@@ -78,6 +78,7 @@ func mainju() {
 	dbInterface = m
 
 	dbInterface.Insert("insert")
-
-	// 输入九九乘法口诀
+	dbInterface.Delete("delete")
+	dbInterface.Update("update")
+	dbInterface.Query("query")
 }
